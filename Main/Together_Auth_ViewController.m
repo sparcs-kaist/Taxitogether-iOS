@@ -1,0 +1,378 @@
+//
+//  Together_Auth_ViewController.m
+//  TaxiTogether
+//
+//  Created by Fragarach on 7/31/11.
+//  Copyright 2011 KAIST. All rights reserved.
+//
+
+#import "Together_Auth_ViewController.h"
+#import "Together_Auth_PortalID.h"
+#import "Together_Auth_Gender.h"
+#import "Together_Auth_Phone.h"
+#import "Together_Auth_Photo.h"
+#import "NetworkHandler.h"
+#import "DBHandler.h"
+#import "SBJsonParser.h"
+
+#import "MainAppDelegate.h"
+
+@implementation Together_Auth_ViewController
+@synthesize portalIDText, phoneText, sendAuth;
+
+- (id)initWithStyle:(UITableViewStyle)style
+{
+    self = [super initWithStyle:style];
+    if (self) {
+        // Custom initialization
+    }
+    return self;
+}
+
+- (void)dealloc
+{
+    [super dealloc];
+}
+
+- (void)didReceiveMemoryWarning
+{
+    // Releases the view if it doesn't have a superview.
+    [super didReceiveMemoryWarning];
+    
+    // Release any cached data, images, etc that aren't in use.
+}
+
+#pragma mark - View lifecycle
+
+- (void)viewDidLoad
+{
+    [super viewDidLoad];
+
+    // Uncomment the following line to preserve selection between presentations.
+    // self.clearsSelectionOnViewWillAppear = NO; 
+    // Uncomment the following line to display an Edit button in the navigation bar for this view controller.
+    // self.navigationItem.rightBarButtonItem = self.editButtonItem;
+}
+
+- (void)viewDidUnload
+{
+    [super viewDidUnload];
+    // Release any retained subviews of the main view.
+    // e.g. self.myOutlet = nil;
+}
+
+- (void)viewWillAppear:(BOOL)animated
+{
+    [super viewWillAppear:animated];
+}
+
+- (void)viewDidAppear:(BOOL)animated
+{
+    [super viewDidAppear:animated];
+    
+    if (floor(NSFoundationVersionNumber) > NSFoundationVersionNumber_iOS_6_1){
+        [[UIApplication sharedApplication] setStatusBarHidden:YES];
+    } 
+}
+
+- (void)viewWillDisappear:(BOOL)animated
+{
+    [super viewWillDisappear:animated];
+    [[UIApplication sharedApplication] setStatusBarHidden:NO withAnimation:UIStatusBarAnimationSlide];
+}
+
+- (void)viewDidDisappear:(BOOL)animated
+{
+    [super viewDidDisappear:animated];
+}
+
+- (BOOL)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)interfaceOrientation
+{
+    // Return YES for supported orientations
+    return (interfaceOrientation == UIInterfaceOrientationPortrait);
+}
+
+- (IBAction) portalIDDone
+{
+    [portalIDText resignFirstResponder];
+}
+
+- (IBAction) phoneDone 
+{
+    [phoneText resignFirstResponder];
+}
+
+- (IBAction)sendAuth:(id)sender {
+    
+    NetworkHandler *networkHandler = [NetworkHandler getNetworkHandler];
+    //NSLog([[self userid] text]);
+    MainAppDelegate *mainApp = (MainAppDelegate *)[[UIApplication sharedApplication]delegate];
+    NSMutableString *deviceToken = mainApp.deviceId;
+    
+    NSString *portalIDValue = portalIDText.text;
+    NSInteger gender = [genderSeg selectedSegmentIndex];
+    NSString *phoneValue = phoneText.text;
+    
+    if ( [portalIDValue isEqualToString:@""] || [phoneValue isEqualToString:@""] )
+    {
+        [[[[UIAlertView alloc]initWithTitle:@"인증실패" message:@"필요한 정보를 모두채워주시기 바랍니다!" delegate:nil cancelButtonTitle:@"확인" otherButtonTitles:nil, nil]autorelease]show];
+        return;
+    }
+    NSString *genderValue = gender == 0 ? @"M" : @"F";
+    
+    NSMutableDictionary *requestDict=[[NSMutableDictionary alloc] initWithObjectsAndKeys:
+                                      portalIDValue, @"userid",
+                                      genderValue, @"gender",
+                                      phoneValue, @"phone",
+                                      //@"e29fe4188c0b3610c859edf0535b4d4e8dddb6854ec4b4d149d537fdba27ffa8", @"token",                               
+                                      deviceToken, @"token",
+                                      nil];
+    
+    [networkHandler grabURLInBackground:@"duck/add/" callObject:self requestDict:requestDict method:@"POST" alert:YES];
+    //[networkHandler release];
+    sendAuth.enabled = NO;
+    [requestDict release];
+    
+}
+- (void)requestFinished:(ASIHTTPRequest *)request
+{
+    // Use when fetching text data
+    NSString *responseString =[request responseString];
+    //NSLog(responseString);
+    SBJsonParser* json = [SBJsonParser alloc];
+	NSDictionary *dataString = [json objectWithString:responseString];
+    
+    int errorcode=[[dataString objectForKey:@"errorcode"]intValue];
+    if(errorcode==100){
+        [[[[UIAlertView alloc]initWithTitle:@"성공!" message:@"입력하신 KAIST메일로 인증메일이 발송되었습니다. 확인해주세요!" delegate:nil cancelButtonTitle:@"확인" otherButtonTitles:nil, nil]autorelease]show];
+    }
+    else if(errorcode==114)
+    {
+        [[[[UIAlertView alloc]initWithTitle:@"성공!" message:@"입력하신 KAIST메일로 재인증메일이 발송되었습니다. 확인해주세요! 재인증이 완료된 후에는 이전 장치는 사용하실 수 없습니다." delegate:nil cancelButtonTitle:@"확인" otherButtonTitles:nil, nil]autorelease]show];
+    }
+    else if(errorcode==109){
+        [[[[UIAlertView alloc]initWithTitle:@"성공!" message:@"입력하신 KAIST메일로 인증메일이 재발송되었습니다. 확인해주세요!" delegate:nil cancelButtonTitle:@"확인" otherButtonTitles:nil, nil]autorelease]show];
+    }
+    else if(errorcode==101)
+    {
+        [[[[UIAlertView alloc]initWithTitle:@"실패" message:@"입력하신 정보중 옳지 않은 내용이 있습니다." delegate:nil cancelButtonTitle:@"확인" otherButtonTitles:nil, nil]autorelease]show];
+    }
+    else if(errorcode==108)
+    {
+        [[[[UIAlertView alloc]initWithTitle:@"실패" message:@"다른 아이디로 인증된 전화번호입니다." delegate:nil cancelButtonTitle:@"확인" otherButtonTitles:nil, nil]autorelease]show];
+    }
+    else if(errorcode==110)
+    {
+        [[[[UIAlertView alloc]initWithTitle:@"실패" message:@"옳지 않은 핸드폰번호 형식입니다." delegate:nil cancelButtonTitle:@"확인" otherButtonTitles:nil, nil]autorelease]show];
+    }
+    else if(errorcode==106||errorcode==112)
+    {
+    }
+    else
+    {
+        [[[[UIAlertView alloc]initWithTitle:@"오류" message:[NSString stringWithFormat:@"(%@)개발자에게 문의해주세요",[dataString objectForKey:@"errorcode"]] delegate:nil cancelButtonTitle:@"확인" otherButtonTitles:nil, nil]autorelease ]show];
+    }
+    sendAuth.enabled =YES;
+    [json release];
+}
+
+- (void)requestFailed:(ASIHTTPRequest *)request {
+    NSError *error = [request error];
+    if ([error code] == ASIRequestTimedOutErrorType ) {
+        // Actions specific to timeout
+        [[[[UIAlertView alloc]initWithTitle:@"네트워크 오류" message:@"RequestTimeOut.\n다시 시도해 보세요." delegate:nil cancelButtonTitle:@"확인" otherButtonTitles:nil, nil]autorelease]show];        
+    }
+    sendAuth.enabled = YES;
+    
+}
+
+#pragma mark - Table view data source
+
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView
+{
+    // Return the number of sections.
+    return 1;
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
+{
+    // Return the number of rows in the section.
+    //return 4;
+    return 3;
+}
+
+- (CGFloat) tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    int row = [indexPath row];
+    switch (row) {
+        case 0:
+        case 1:
+        case 2:
+            return 55;
+            
+        case 3:
+            return 111;
+    }
+    return 45;
+}
+
+-(BOOL)textFieldShouldReturn:(UITextField *) textField
+{
+    if ( textField == portalIDText )
+    {
+        [phoneText becomeFirstResponder];
+    }
+    else 
+    {
+        [textField resignFirstResponder];
+    }
+    //[userid resignFirstResponder];
+    return YES;
+}
+
+- (void) segmentAction:(UISegmentedControl* )sender
+{
+    //NSLog(@"segment Action");
+    NSInteger index = [sender selectedSegmentIndex];
+    if ( sender == portalSeg && index == 1 ){
+        [phoneText becomeFirstResponder];        
+    }
+    if ( sender == phoneSeg && index == 0 ){
+        [portalIDText becomeFirstResponder];
+    }
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    static NSString *portalIdentifier = @"PortalCell";
+    static NSString *genderIdentifier = @"GenderCell";
+    static NSString *phoneIdentifier = @"PhoneCell";
+    
+    int row = [indexPath row];
+    switch (row) {
+        case 0:
+        {
+            Together_Auth_PortalID *portalCell= (Together_Auth_PortalID *)[tableView dequeueReusableCellWithIdentifier:portalIdentifier];
+            if(portalCell==nil){
+                NSArray* nib=[[NSBundle mainBundle] loadNibNamed:@"Together_Auth_PortalID" owner:self options:nil];
+                portalCell=(Together_Auth_PortalID *)[nib objectAtIndex:0];
+                portalCell.accessoryType=UITableViewCellAccessoryNone;
+
+            }
+            portalIDText = portalCell.portalID;
+            portalIDText.delegate = self;
+            portalIDText.inputAccessoryView = portalCell.toolbar;
+            portalSeg = portalCell.prevnext;
+            [portalSeg addTarget:self action:@selector(segmentAction:) forControlEvents:UIControlEventValueChanged];
+            [portalCell.done setTarget:self];
+            [portalCell.done setAction:@selector(portalIDDone)];
+
+            [portalIDText setFrame:CGRectMake(portalIDText.frame.origin.x, portalIDText.frame.origin.y-1, portalIDText.frame.size.width, 33)];
+            return portalCell;
+        }   
+        case 1:
+        {
+            Together_Auth_Phone *phoneCell= (Together_Auth_Phone *)[tableView dequeueReusableCellWithIdentifier:phoneIdentifier];
+            if(phoneCell==nil){
+                NSArray* nib=[[NSBundle mainBundle] loadNibNamed:@"Together_Auth_Phone" owner:self options:nil];
+                phoneCell=(Together_Auth_Phone *)[nib objectAtIndex:0];
+                phoneCell.accessoryType=UITableViewCellAccessoryNone;
+                
+            }
+            phoneText = phoneCell.phone;
+            phoneText.delegate = self;
+            phoneText.inputAccessoryView = phoneCell.toolbar;
+            phoneSeg = phoneCell.prevnext;
+            [phoneSeg addTarget:self action:@selector(segmentAction:) forControlEvents:UIControlEventValueChanged];
+            [phoneCell.done setTarget:self];
+            [phoneCell.done setAction:@selector(phoneDone)];
+            
+            [phoneText setFrame:CGRectMake(phoneText.frame.origin.x, phoneText.frame.origin.y-1, phoneText.frame.size.width, 33)];
+            return phoneCell;
+        }
+        case 2:
+        {            
+            Together_Auth_Gender *genderCell= (Together_Auth_Gender *)[tableView dequeueReusableCellWithIdentifier:genderIdentifier];
+            if(genderCell==nil){
+                NSArray* nib=[[NSBundle mainBundle] loadNibNamed:@"Together_Auth_Gender" owner:self options:nil];
+                genderCell=(Together_Auth_Gender *)[nib objectAtIndex:0];
+                genderCell.accessoryType=UITableViewCellAccessoryNone;
+            }
+            [genderCell.gender setFrame:CGRectMake(genderCell.gender.frame.origin.x, genderCell.gender.frame.origin.y+7, 118, 30)];
+            genderSeg = genderCell.gender;
+            return genderCell;
+        }
+        /*
+        case 3:
+        {
+            Together_Auth_Photo *photoCell= (Together_Auth_Photo *)[tableView dequeueReusableCellWithIdentifier:photoIdentifier];
+            if(photoCell==nil){
+                NSArray* nib=[[NSBundle mainBundle] loadNibNamed:@"Together_Auth_Photo" owner:self options:nil];
+                photoCell=(Together_Auth_Photo *)[nib objectAtIndex:0];
+                photoCell.accessoryType=UITableViewCellAccessoryNone;
+            }
+            return photoCell;
+
+
+        }
+         */
+        default:
+            break;
+    }
+    return  nil;
+}
+
+/*
+// Override to support conditional editing of the table view.
+- (BOOL)tableView:(UITableView *)tableView canEditRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    // Return NO if you do not want the specified item to be editable.
+    return YES;
+}
+*/
+
+/*
+// Override to support editing the table view.
+- (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)editingStyle forRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    if (editingStyle == UITableViewCellEditingStyleDelete) {
+        // Delete the row from the data source
+        [tableView deleteRowsAtIndexPaths:[NSArray arrayWithObject:indexPath] withRowAnimation:UITableViewRowAnimationFade];
+    }   
+    else if (editingStyle == UITableViewCellEditingStyleInsert) {
+        // Create a new instance of the appropriate class, insert it into the array, and add a new row to the table view
+    }   
+}
+*/
+
+/*
+// Override to support rearranging the table view.
+- (void)tableView:(UITableView *)tableView moveRowAtIndexPath:(NSIndexPath *)fromIndexPath toIndexPath:(NSIndexPath *)toIndexPath
+{
+}
+*/
+
+/*
+// Override to support conditional rearranging of the table view.
+- (BOOL)tableView:(UITableView *)tableView canMoveRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    // Return NO if you do not want the item to be re-orderable.
+    return YES;
+}
+*/
+
+#pragma mark - Table view delegate
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    // Navigation logic may go here. Create and push another view controller.
+    /*
+     <#DetailViewController#> *detailViewController = [[<#DetailViewController#> alloc] initWithNibName:@"<#Nib name#>" bundle:nil];
+     // ...
+     // Pass the selected object to the new view controller.
+     [self.navigationController pushViewController:detailViewController animated:YES];
+     [detailViewController release];
+     */
+}
+
+@end
